@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Dashboard | Online Voting System</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #f1f5f9;
+        }
+
+        .navbar {
+            background: #0f172a;
+            color: white;
+            padding: 18px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .logout {
+            color: white;
+            text-decoration: none;
+            background: #dc2626;
+            padding: 9px 16px;
+            border-radius: 7px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome {
+            margin-bottom: 30px;
+        }
+
+        .welcome h1 {
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .welcome p {
+            color: #64748b;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-icon {
+            font-size: 35px;
+            margin-bottom: 15px;
+        }
+
+        .card h2 {
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+            background: #2563eb;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 7px;
+        }
+    </style>
+</head>
+
+<body>
+
+<nav class="navbar">
+
+    <div class="logo">
+        🗳️ Online Voting System
+    </div>
+
+    <a href="{% url 'logout' %}" class="logout">
+    Logout
+</a>
+
+</nav>
+
+<div class="container">
+
+    <div class="welcome">
+
+        <h1>Welcome, {{ user.username }}!</h1>
+
+        <p>
+            Participate in available elections securely and conveniently.
+        </p>
+
+    </div>
+
+    <div class="cards">
+
+        <div class="card">
+
+            <div class="card-icon">🗳️</div>
+
+            <h2>Available Elections</h2>
+
+            <p>
+                View elections that are currently available for voting.
+            </p>
+
+            <a href="#" class="btn">
+                View Elections
+            </a>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-icon">📊</div>
+
+            <h2>Results</h2>
+
+            <p>
+                View results of elections that have been completed.
+            </p>
+
+            <a href="#" class="btn">
+                View Results
+            </a>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-icon">👤</div>
+
+            <h2>My Profile</h2>
+
+            <p>
+                View and manage your account information.
+            </p>
+
+            <a href="#" class="btn">
+                My Profile
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>

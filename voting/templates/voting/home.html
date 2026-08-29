@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Online Voting System</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            color: white;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 8%;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 25px;
+        }
+
+        nav a:hover {
+            text-decoration: underline;
+        }
+
+        .hero {
+            min-height: calc(100vh - 80px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .hero-content {
+            max-width: 800px;
+        }
+
+        .icon {
+            font-size: 70px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 52px;
+            margin-bottom: 20px;
+        }
+
+        .subtitle {
+            font-size: 20px;
+            line-height: 1.6;
+            color: #dbeafe;
+            margin-bottom: 35px;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .login-button {
+            background: white;
+            color: #1e3a8a;
+        }
+
+        .register-button {
+            background: #2563eb;
+            color: white;
+            border: 1px solid white;
+        }
+
+        .login-button:hover,
+        .register-button:hover {
+            opacity: 0.85;
+        }
+
+        .features {
+            margin-top: 50px;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+
+        .feature {
+            max-width: 200px;
+        }
+
+        .feature h3 {
+            margin-bottom: 8px;
+        }
+
+        .feature p {
+            color: #bfdbfe;
+            line-height: 1.5;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <nav>
+
+        <div class="logo">
+            🗳️ Online Voting System
+        </div>
+
+        <div>
+            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'register' %}">Register</a>
+        </div>
+
+    </nav>
+
+
+    <section class="hero">
+
+        <div class="hero-content">
+
+            <div class="icon">
+                🗳️
+            </div>
+
+            <h1>
+                Secure Online Voting
+            </h1>
+
+            <p class="subtitle">
+                A secure and convenient platform for participating
+                in elections online. Register, view elections,
+                vote for your preferred candidate, and receive
+                confirmation of your vote.
+            </p>
+
+
+            <div class="buttons">
+
+                <a
+                    href="{% url 'login' %}"
+                    class="button login-button"
+                >
+                    Login
+                </a>
+
+                <a
+                    href="{% url 'register' %}"
+                    class="button register-button"
+                >
+                    Create Account
+                </a>
+
+            </div>
+
+
+            <div class="features">
+
+                <div class="feature">
+
+                    <h3>🔐 Secure</h3>
+
+                    <p>
+                        Authentication and security controls
+                        protect voter accounts.
+                    </p>
+
+                </div>
+
+
+                <div class="feature">
+
+                    <h3>🗳️ Simple</h3>
+
+                    <p>
+                        View elections and cast your vote
+                        through an easy-to-use interface.
+                    </p>
+
+                </div>
+
+
+                <div class="feature">
+
+                    <h3>📊 Transparent</h3>
+
+                    <p>
+                        Election results can be viewed
+                        when an election is officially closed.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</body>
+
+</html>
