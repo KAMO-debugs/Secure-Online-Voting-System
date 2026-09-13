@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 
 class StudentProfile(models.Model):
@@ -11,12 +12,12 @@ class StudentProfile(models.Model):
     ]
 
     user = models.OneToOneField(
-    User,
-    on_delete=models.SET_NULL,
-    related_name='student_profile',
-    null=True,
-    blank=True
-)
+        User,
+        on_delete=models.SET_NULL,
+        related_name='student_profile',
+        null=True,
+        blank=True
+    )
 
     student_number = models.CharField(
         max_length=50,
@@ -55,18 +56,18 @@ class StudentProfile(models.Model):
 
 class Election(models.Model):
 
-    ELECTION_TYPE_CHOICES = [
-        ('INSTITUTIONAL', 'Institutional SRC'),
-        ('CAMPUS', 'Campus SRC'),
-        ('RUNOFF', 'Runoff'),
-    ]
-
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
         ('SCHEDULED', 'Scheduled'),
         ('OPEN', 'Open'),
         ('CLOSED', 'Closed'),
         ('RESULTS', 'Results'),
+    ]
+
+    ELECTION_TYPE_CHOICES = [
+        ('INSTITUTIONAL', 'Institutional SRC'),
+        ('CAMPUS', 'Campus SRC'),
+        ('RUNOFF', 'Runoff'),
     ]
 
     title = models.CharField(
@@ -99,6 +100,27 @@ class Election(models.Model):
 
     def __str__(self):
         return self.title
+
+    def update_status(self):
+
+        now = timezone.now()
+
+        if self.status in ['DRAFT', 'RESULTS']:
+            return
+
+        if now < self.start_date:
+            new_status = 'SCHEDULED'
+
+        elif self.start_date <= now <= self.end_date:
+            new_status = 'OPEN'
+
+        else:
+            new_status = 'CLOSED'
+
+        if self.status != new_status:
+            self.status = new_status
+            self.save(update_fields=['status'])
+
 
 class Candidate(models.Model):
 
@@ -137,22 +159,28 @@ class Candidate(models.Model):
 
 
 class Vote(models.Model):
+
     voter = models.ForeignKey(
-        'auth.User',
+        User,
         on_delete=models.CASCADE,
         related_name='votes'
     )
+
     election = models.ForeignKey(
         Election,
         on_delete=models.CASCADE,
         related_name='votes'
     )
+
     candidate = models.ForeignKey(
         Candidate,
         on_delete=models.CASCADE,
         related_name='votes'
     )
-    voted_at = models.DateTimeField(auto_now_add=True)
+
+    voted_at = models.DateTimeField(
+        auto_now_add=True
+    )
 
     class Meta:
         constraints = [
@@ -167,16 +195,24 @@ class Vote(models.Model):
 
 
 class AuditLog(models.Model):
+
     user = models.ForeignKey(
-        'auth.User',
+        User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='audit_logs'
     )
-    action = models.CharField(max_length=100)
+
+    action = models.CharField(
+        max_length=100
+    )
+
     description = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
+
+    timestamp = models.DateTimeField(
+        auto_now_add=True
+    )
 
     def __str__(self):
         return f"{self.action} - {self.timestamp}"
