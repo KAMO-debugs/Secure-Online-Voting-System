@@ -1,70 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Create Election</title>
-
     <style>
-
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
         }
-
         body {
             background: #f4f6f8;
             color: #1f2937;
         }
-
         .navbar {
             background: #172554;
             color: white;
             padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-
         .navbar h1 {
             font-size: 24px;
         }
-
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+        }
+        .back-link {
+            background: #444;
+        }
+        .back-link:hover {
+            background: #666;
+        }
         .container {
             max-width: 800px;
             margin: 40px auto;
             padding: 0 20px;
         }
-
         .form-card {
             background: white;
             padding: 35px;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
-
         h2 {
             margin-bottom: 10px;
         }
-
         .subtitle {
             color: #6b7280;
             margin-bottom: 30px;
         }
-
         .form-group {
             margin-bottom: 20px;
         }
-
         label {
             display: block;
             font-weight: bold;
             margin-bottom: 8px;
         }
-
         input,
         textarea,
         select {
@@ -74,18 +78,15 @@
             border-radius: 6px;
             font-size: 15px;
         }
-
         textarea {
             min-height: 120px;
             resize: vertical;
         }
-
         .buttons {
             display: flex;
             gap: 10px;
             margin-top: 25px;
         }
-
         .button {
             padding: 12px 20px;
             border: none;
@@ -94,168 +95,90 @@
             text-decoration: none;
             font-weight: bold;
         }
-
         .submit-button {
             background: #16a34a;
             color: white;
         }
-
+        .submit-button:hover {
+            background: #15803d;
+        }
         .cancel-button {
             background: #6b7280;
             color: white;
         }
-
+        .cancel-button:hover {
+            background: #4b5563;
+        }
+        @media (max-width: 700px) {
+            .navbar {
+                padding: 20px;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .container {
+                padding: 20px;
+            }
+        }
     </style>
-
 </head>
-
 <body>
-
     <div class="navbar">
-
         <h1>🗳️ Secure Online Voting System</h1>
-
-    </div>
-
-
-    <div class="container">
-
-        <div class="form-card">
-
-            <h2>Create Election</h2>
-
-            <p class="subtitle">
-                Create a new election for voters.
-            </p>
-
-
-            <form method="POST">
-
-                {% csrf_token %}
-
-
-                <div class="form-group">
-
-                    <label for="title">
-                        Election Title
-                    </label>
-
-                    <input
-                        type="text"
-                        id="title"
-                        name="title"
-                        placeholder="Enter election title"
-                        required
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="description">
-                        Description
-                    </label>
-
-                    <textarea
-                        id="description"
-                        name="description"
-                        placeholder="Enter election description"
-                        required
-                    ></textarea>
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="start_date">
-                        Start Date and Time
-                    </label>
-
-                    <input
-                        type="datetime-local"
-                        id="start_date"
-                        name="start_date"
-                        required
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="end_date">
-                        End Date and Time
-                    </label>
-
-                    <input
-                        type="datetime-local"
-                        id="end_date"
-                        name="end_date"
-                        required
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="status">
-                        Election Status
-                    </label>
-
-                    <select id="status" name="status" required>
-
-                        <option value="DRAFT">
-                            Draft
-                        </option>
-
-                        <option value="SCHEDULED">
-                            Scheduled
-                        </option>
-
-                        <option value="OPEN">
-                            Open
-                        </option>
-
-                        <option value="CLOSED">
-                            Closed
-                        </option>
-
-                        <option value="RESULTS">
-                            Results
-                        </option>
-
-                    </select>
-
-                </div>
-
-
-                <div class="buttons">
-
-                    <button
-                        type="submit"
-                        class="button submit-button"
-                    >
-                        Create Election
-                    </button>
-
-                    <a
-                        href="{% url 'manage_elections' %}"
-                        class="button cancel-button"
-                    >
-                        Cancel
-                    </a>
-
-                </div>
-
-            </form>
-
+        <div class="navbar-right">
+            <a href="{% url 'manage_elections' %}" class="back-link">← Back to Elections</a>
+            <a href="{% url 'admin_dashboard' %}" class="back-link">Admin Dashboard</a>
         </div>
-
     </div>
-
+    <div class="container">
+        <div class="form-card">
+            <h2>Create Election</h2>
+            <p class="subtitle">Create a new election for voters.</p>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="title">Election Title</label>
+                    <input type="text" id="title" name="title" placeholder="Enter election title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" placeholder="Enter election description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="election_type">Election Type</label>
+                    <select id="election_type" name="election_type" required>
+                        <option value="INSTITUTIONAL">Institutional SRC</option>
+                        <option value="CAMPUS">Campus SRC</option>
+                        <option value="RUNOFF">Runoff</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="campus">Campus (optional)</label>
+                    <input type="text" id="campus" name="campus" placeholder="Enter campus name">
+                </div>
+                <div class="form-group">
+                    <label for="start_date">Start Date and Time</label>
+                    <input type="datetime-local" id="start_date" name="start_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="end_date">End Date and Time</label>
+                    <input type="datetime-local" id="end_date" name="end_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="status">Election Status</label>
+                    <select id="status" name="status" required>
+                        <option value="DRAFT">Draft</option>
+                        <option value="SCHEDULED">Scheduled</option>
+                        <option value="OPEN">Open</option>
+                        <option value="CLOSED">Closed</option>
+                        <option value="RESULTS">Results</option>
+                    </select>
+                </div>
+                <div class="buttons">
+                    <button type="submit" class="button submit-button">Create Election</button>
+                    <a href="{% url 'manage_elections' %}" class="button cancel-button">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
-
 </html>
