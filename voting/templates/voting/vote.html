@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vote - Live SRC Voting System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background-color: #f4f6f8;
+            color: #1f2937;
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: #222;
+            color: white;
+            padding: 18px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar h2 {
+            margin: 0;
+        }
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .navbar-right a {
+            color: white;
+            text-decoration: none;
+        }
+        .logout {
+            padding: 8px 15px;
+            border: 1px solid white;
+            border-radius: 5px;
+        }
+        .back-link {
+            padding: 8px 15px;
+            border: 1px solid white;
+            border-radius: 5px;
+            background: #444;
+        }
+        .back-link:hover {
+            background: #666;
+        }
+        .container {
+            width: 90%;
+            max-width: 900px;
+            margin: 35px auto;
+        }
+        .election-card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 25px;
+        }
+        .election-card h1 {
+            color: #222;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .election-description {
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .election-meta {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .election-meta strong {
+            color: #374151;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #f0c36d;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 25px 0;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .warning-box strong {
+            color: #856404;
+        }
+        .messages {
+            margin-bottom: 20px;
+        }
+        .message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            color: #721c24;
+        }
+        .message-success {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+        }
+        .candidate-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .candidate-section h2 {
+            color: #222;
+            margin-bottom: 20px;
+            font-size: 22px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .candidate-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .candidate-card {
+            background: #f9fafb;
+            border: 2px solid transparent;
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .candidate-card:hover {
+            border-color: #2563eb;
+            background: #eff6ff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .candidate-card.selected {
+            border-color: #16a34a;
+            background: #f0fdf4;
+        }
+        .candidate-card.selected::after {
+            content: "✓";
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #16a34a;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+        .candidate-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #222;
+        }
+        .candidate-type {
+            color: #6b7280;
+            font-size: 13px;
+            margin-bottom: 10px;
+            display: inline-block;
+            background: #e5e7eb;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+        .candidate-description {
+            font-size: 14px;
+            color: #4b5563;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        .candidate-image {
+            width: 100%;
+            max-height: 180px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .radio-input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .submit-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin-top: 25px;
+        }
+        .submit-button {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            background-color: #222;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .submit-button:hover {
+            background-color: #444;
+        }
+        .submit-button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .selected-vote-info {
+            background: #f0fdf4;
+            border: 1px solid #a7f3d0;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .selected-vote-info strong {
+            color: #065f46;
+        }
+        .no-candidates {
+            text-align: center;
+            padding: 40px;
+            background: #f9fafb;
+            border-radius: 10px;
+            color: #6b7280;
+        }
+        @media (max-width: 700px) {
+            .container {
+                width: 95%;
+                padding: 0;
+            }
+            .candidate-list {
+                grid-template-columns: 1fr;
+            }
+            .navbar {
+                padding: 15px 20px;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .navbar-right {
+                gap: 10px;
+            }
+            .election-card h1 {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h2>Live SRC Voting System</h2>
+        <div class="navbar-right">
+            {% if request.user.is_staff %}
+                <a href="{% url 'admin_dashboard' %}" class="back-link">← Admin Dashboard</a>
+            {% else %}
+                <a href="{% url 'dashboard' %}" class="back-link">← Student Dashboard</a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="logout">Logout</a>
+        </div>
+    </div>
+    <div class="container">
+        <div class="election-card">
+            <h1>🗳️ {{ election.title }}</h1>
+            <p class="election-description">
+                {{ election.description }}
+            </p>
+            <div class="election-meta">
+                <strong>Election Type:</strong> {{ election.get_election_type_display }}<br>
+                {% if election.campus %}
+                    <strong>Campus:</strong> {{ election.campus }}<br>
+                {% endif %}
+                <strong>Status:</strong> {{ election.get_status_display }}<br>
+                <strong>Voting Period:</strong> {{ election.start_date }} to {{ election.end_date }}
+            </div>
+        </div>
+        <div class="warning-box">
+            <strong>⚠️ Important:</strong>
+            Select only <strong>ONE</strong> candidate for this election.
+            Once your vote is submitted, it <strong>cannot be changed</strong>.
+            Please verify your selection carefully before submitting.
+        </div>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="message {% if message.tags %}message-{{ message.tags }}{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if candidates %}
+            <form method="POST" id="vote-form">
+                {% csrf_token %}
+                <div class="candidate-section">
+                    <h2>Choose Your Candidate</h2>
+                    <div class="candidate-list">
+                        {% for candidate in candidates %}
+                            <label class="candidate-card" for="candidate-{{ candidate.id }}">
+                                <input type="radio" id="candidate-{{ candidate.id }}" name="candidate" value="{{ candidate.id }}" class="radio-input" required>
+                                {% if candidate.image %}
+                                    <img src="{{ candidate.image.url }}" alt="{{ candidate.name }}" class="candidate-image">
+                                {% endif %}
+                                <div class="candidate-name">
+                                    {{ candidate.name }}
+                                </div>
+                                <span class="candidate-type">
+                                    {{ candidate.get_candidate_type_display }}
+                                </span>
+                                {% if candidate.description %}
+                                    <p class="candidate-description">
+                                        {{ candidate.description }}
+                                    </p>
+                                {% endif %}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="submit-section">
+                    <div class="selected-vote-info" id="selected-info" style="display: none;">
+                        You have selected: <strong id="selected-name"></strong>
+                    </div>
+                    <button type="submit" class="submit-button" id="submit-btn">
+                        Submit Your Vote
+                    </button>
+                </div>
+            </form>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const candidateCards = document.querySelectorAll('.candidate-card');
+                    const selectedInfo = document.getElementById('selected-info');
+                    const selectedName = document.getElementById('selected-name');
+                    const submitBtn = document.getElementById('submit-btn');
+                    candidateCards.forEach(function (card) {
+                        const radio = card.querySelector('input[type="radio"]');
+                        card.addEventListener('click', function () {
+                            candidateCards.forEach(function (c) {
+                                c.classList.remove('selected');
+                            });
+                            card.classList.add('selected');
+                            selectedInfo.style.display = 'block';
+                            selectedName.textContent = card.querySelector('.candidate-name').textContent;
+                        });
+                        radio.addEventListener('change', function () {
+                            candidateCards.forEach(function (c) {
+                                c.classList.remove('selected');
+                            });
+                            card.classList.add('selected');
+                            selectedInfo.style.display = 'block';
+                            selectedName.textContent = card.querySelector('.candidate-name').textContent;
+                        });
+                    });
+                    submitBtn.addEventListener('click', function (e) {
+                        const selected = document.querySelector('input[name="candidate"]:checked');
+                        if (!selected) {
+                            e.preventDefault();
+                            alert('Please select a candidate before submitting your vote.');
+                        }
+                    });
+                });
+            </script>
+        {% else %}
+            <div class="no-candidates">
+                <h3>No candidates available</h3>
+                <p>There are currently no candidates registered for this election.</p>
+                <a href="{% url 'dashboard' %}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #222; color: white; text-decoration: none; border-radius: 6px;">
+                    ← Back to Dashboard
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
