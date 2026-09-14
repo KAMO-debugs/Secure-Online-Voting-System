@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Profile - Live SRC Voting System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background-color: #f4f6f8;
+            color: #1f2937;
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: #222;
+            color: white;
+            padding: 18px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar h2 {
+            margin: 0;
+        }
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .navbar-right a {
+            color: white;
+            text-decoration: none;
+        }
+        .logout {
+            padding: 8px 15px;
+            border: 1px solid white;
+            border-radius: 5px;
+        }
+        .back-link {
+            padding: 8px 15px;
+            border: 1px solid white;
+            border-radius: 5px;
+            background: #444;
+        }
+        .back-link:hover {
+            background: #666;
+        }
+        .container {
+            width: 90%;
+            max-width: 600px;
+            margin: 35px auto;
+        }
+        .form-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .form-card h1 {
+            margin-bottom: 20px;
+            color: #222;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        input,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        input[readonly] {
+            background: #f3f4f6;
+            color: #9ca3af;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+        .button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 15px;
+        }
+        .submit-button {
+            background: #2563eb;
+            color: white;
+        }
+        .submit-button:hover {
+            background: #1d4ed8;
+        }
+        .cancel-button {
+            background: #6b7280;
+            color: white;
+        }
+        .cancel-button:hover {
+            background: #4b5563;
+        }
+        .message {
+            background: #f8d7da;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #721c24;
+        }
+        .message-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        @media (max-width: 700px) {
+            .container {
+                width: 95%;
+            }
+            .navbar {
+                flex-direction: column;
+                gap: 10px;
+                padding: 15px 20px;
+            }
+            .navbar-right {
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h2>Live SRC Voting System</h2>
+        <div class="navbar-right">
+            {% if request.user.is_staff %}
+                <a href="{% url 'admin_dashboard' %}" class="back-link">← Admin Dashboard</a>
+            {% else %}
+                <a href="{% url 'profile' %}" class="back-link">← Back to Profile</a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="logout">Logout</a>
+        </div>
+    </div>
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        <div class="form-card">
+            <h1>✏️ Edit Profile</h1>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="id_student_number">Student Number</label>
+                    <input type="text" id="id_student_number" name="student_number" value="{{ form.student_number.value }}" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="id_full_name">Full Name</label>
+                    <input type="text" id="id_full_name" name="full_name" value="{{ form.full_name.value }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_campus">Campus</label>
+                    <input type="text" id="id_campus" name="campus" value="{{ form.campus.value }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_faculty">Faculty</label>
+                    <input type="text" id="id_faculty" name="faculty" value="{{ form.faculty.value }}" required>
+                </div>
+                <div class="buttons">
+                    <button type="submit" class="button submit-button">Save Changes</button>
+                    <a href="{% url 'profile' %}" class="button cancel-button">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

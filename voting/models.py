@@ -124,6 +124,11 @@ class Election(models.Model):
 
 class Candidate(models.Model):
 
+    SRC_CATEGORY_CHOICES = [
+        ('INSTITUTIONAL', 'Institutional SRC'),
+        ('CAMPUS', 'Campus SRC'),
+    ]
+
     CANDIDATE_TYPE_CHOICES = [
         ('ORGANIZATION', 'Organization'),
         ('INDEPENDENT', 'Independent Candidate'),
@@ -133,6 +138,12 @@ class Candidate(models.Model):
         Election,
         on_delete=models.CASCADE,
         related_name='candidates'
+    )
+
+    src_category = models.CharField(
+        max_length=20,
+        choices=SRC_CATEGORY_CHOICES,
+        default='INSTITUTIONAL'
     )
 
     candidate_type = models.CharField(
@@ -160,6 +171,11 @@ class Candidate(models.Model):
 
 class Vote(models.Model):
 
+    SRC_CATEGORY_CHOICES = [
+        ('INSTITUTIONAL', 'Institutional SRC'),
+        ('CAMPUS', 'Campus SRC'),
+    ]
+
     voter = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -178,6 +194,13 @@ class Vote(models.Model):
         related_name='votes'
     )
 
+    src_category = models.CharField(
+        max_length=20,
+        choices=SRC_CATEGORY_CHOICES,
+        null=True,
+        blank=True
+    )
+
     voted_at = models.DateTimeField(
         auto_now_add=True
     )
@@ -185,14 +208,17 @@ class Vote(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['voter', 'election'],
-                name='one_vote_per_voter_per_election'
+                fields=[
+                    'voter',
+                    'election',
+                    'src_category'
+                ],
+                name='one_vote_per_category_per_election'
             )
         ]
 
     def __str__(self):
-        return f"{self.voter.username} - {self.election.title}"
-
+        return f'{self.voter.username} - {self.election.title} - {self.src_category}'
 
 class AuditLog(models.Model):
 

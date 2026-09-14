@@ -8,6 +8,7 @@ from django.db.models import Count, F
 from django.http import HttpResponseForbidden
 from django.core.paginator import Paginator
 import pandas as pd
+from django.db import transaction
 
 from .forms import RegistrationForm, ProfileUpdateForm, StudentImportForm
 from .models import Election, Candidate, StudentProfile, Vote, AuditLog
@@ -136,16 +137,13 @@ def dashboard(request):
 
 @login_required(login_url='login')
 def vote(request, election_id):
-    print(f"\n=== VOTE VIEW CALLED ===")
-    print(f"Election ID: {election_id}")
-    print(f"User: {request.user.username}")
 
-    election = get_object_or_404(Election, id=election_id)
+    election = get_object_or_404(
+        Election,
+        id=election_id
+    )
 
     election.update_status()
-
-    print(f"Election: {election.title}")
-    print(f"Status: {election.status}")
 
     if election.status != 'OPEN':
         messages.error(
@@ -189,51 +187,106 @@ def vote(request, election_id):
         )
         return redirect('dashboard')
 
-    # Check if already voted
-    if Vote.objects.filter(
+    # Check whether the voter has already completed
+    # both sections of this election
+    institutional_vote = Vote.objects.filter(
         voter=request.user,
-        election=election
-    ).exists():
+        election=election,
+        src_category='INSTITUTIONAL'
+    ).exists()
 
+    campus_vote = Vote.objects.filter(
+        voter=request.user,
+        election=election,
+        src_category='CAMPUS'
+    ).exists()
+
+    if institutional_vote and campus_vote:
         messages.error(
             request,
             'You have already voted in this election.'
         )
         return redirect('dashboard')
 
-    # Get candidates
-    candidates = election.candidates.all()
+    # Get candidates separately
+    institutional_candidates = election.candidates.filter(
+        src_category='INSTITUTIONAL'
+    )
 
-    # Process submitted vote
+    campus_candidates = election.candidates.filter(
+        src_category='CAMPUS'
+    )
+
+    # Process submitted votes
     if request.method == 'POST':
 
-        candidate_id = request.POST.get('candidate')
+        institutional_candidate_id = request.POST.get(
+            'institutional_candidate'
+        )
 
-        if not candidate_id:
+        campus_candidate_id = request.POST.get(
+            'campus_candidate'
+        )
+
+        # Both selections are required
+        if not institutional_candidate_id:
             messages.error(
                 request,
-                'Please select a candidate before submitting your vote.'
+                'Please select one Institutional SRC candidate.'
             )
             return redirect(
                 'vote',
                 election_id=election.id
             )
 
-        candidate = get_object_or_404(
+        if not campus_candidate_id:
+            messages.error(
+                request,
+                'Please select one Campus SRC candidate.'
+            )
+            return redirect(
+                'vote',
+                election_id=election.id
+            )
+
+        # Make sure the Institutional candidate
+        # actually belongs to this election and category
+        institutional_candidate = get_object_or_404(
             Candidate,
-            id=candidate_id,
-            election=election
+            id=institutional_candidate_id,
+            election=election,
+            src_category='INSTITUTIONAL'
         )
 
-        Vote.objects.create(
-            voter=request.user,
+        # Make sure the Campus candidate
+        # actually belongs to this election and category
+        campus_candidate = get_object_or_404(
+            Candidate,
+            id=campus_candidate_id,
             election=election,
-            candidate=candidate
+            src_category='CAMPUS'
         )
+
+        # Save both votes together
+        with transaction.atomic():
+
+            Vote.objects.create(
+                voter=request.user,
+                election=election,
+                candidate=institutional_candidate,
+                src_category='INSTITUTIONAL'
+            )
+
+            Vote.objects.create(
+                voter=request.user,
+                election=election,
+                candidate=campus_candidate,
+                src_category='CAMPUS'
+            )
 
         messages.success(
             request,
-            'Your vote has been successfully recorded.'
+            'Your Institutional SRC and Campus SRC votes have been successfully recorded.'
         )
 
         return redirect('dashboard')
@@ -244,12 +297,14 @@ def vote(request, election_id):
         'voting/vote.html',
         {
             'election': election,
-            'candidates': candidates,
+            'institutional_candidates': institutional_candidates,
+            'campus_candidates': campus_candidates,
         }
     )
 
 @login_required(login_url='login')
 def results(request):
+
     elections = Election.objects.all().order_by('-end_date')
 
     for election in elections:
@@ -258,63 +313,141 @@ def results(request):
     results_data = []
 
     for election in elections:
-        if election.status not in ['SCHEDULED', 'DRAFT']:
-            candidates = election.candidates.all()
-            candidate_results = []
 
-            total_votes = Vote.objects.filter(
-                election=election
+        if election.status not in ['SCHEDULED', 'DRAFT']:
+
+            institutional_candidates = election.candidates.filter(
+                src_category='INSTITUTIONAL'
+            )
+
+            campus_candidates = election.candidates.filter(
+                src_category='CAMPUS'
+            )
+
+            # Institutional SRC results
+            institutional_results = []
+
+            institutional_total_votes = Vote.objects.filter(
+                election=election,
+                src_category='INSTITUTIONAL'
             ).count()
 
-            for candidate in candidates:
+            for candidate in institutional_candidates:
+
                 vote_count = Vote.objects.filter(
                     election=election,
-                    candidate=candidate
+                    candidate=candidate,
+                    src_category='INSTITUTIONAL'
                 ).count()
 
-                if total_votes > 0:
+                if institutional_total_votes > 0:
                     percentage = round(
-                        (vote_count / total_votes) * 100,
+                        (vote_count / institutional_total_votes) * 100,
                         2
                     )
                 else:
                     percentage = 0
 
-                candidate_results.append({
+                institutional_results.append({
                     'candidate': candidate,
                     'vote_count': vote_count,
                     'percentage': percentage,
-                    'is_winner': False
+                    'is_winner': False,
                 })
 
-            if candidate_results:
+            # Find Institutional SRC winner
+            if institutional_results:
+
                 max_votes = max(
                     result['vote_count']
-                    for result in candidate_results
+                    for result in institutional_results
                 )
 
-                for result in candidate_results:
-                    if result['vote_count'] == max_votes and max_votes > 0:
+                for result in institutional_results:
+
+                    if (
+                        result['vote_count'] == max_votes
+                        and max_votes > 0
+                    ):
                         result['is_winner'] = True
+
+
+            # Campus SRC results
+            campus_results = []
+
+            campus_total_votes = Vote.objects.filter(
+                election=election,
+                src_category='CAMPUS'
+            ).count()
+
+            for candidate in campus_candidates:
+
+                vote_count = Vote.objects.filter(
+                    election=election,
+                    candidate=candidate,
+                    src_category='CAMPUS'
+                ).count()
+
+                if campus_total_votes > 0:
+                    percentage = round(
+                        (vote_count / campus_total_votes) * 100,
+                        2
+                    )
+                else:
+                    percentage = 0
+
+                campus_results.append({
+                    'candidate': candidate,
+                    'vote_count': vote_count,
+                    'percentage': percentage,
+                    'is_winner': False,
+                })
+
+            # Find Campus SRC winner
+            if campus_results:
+
+                max_votes = max(
+                    result['vote_count']
+                    for result in campus_results
+                )
+
+                for result in campus_results:
+
+                    if (
+                        result['vote_count'] == max_votes
+                        and max_votes > 0
+                    ):
+                        result['is_winner'] = True
+
 
             results_data.append({
                 'election': election,
-                'candidates': candidate_results,
-                'total_votes': total_votes
+
+                'institutional_results': institutional_results,
+                'institutional_total_votes': institutional_total_votes,
+
+                'campus_results': campus_results,
+                'campus_total_votes': campus_total_votes,
             })
 
         else:
+
             results_data.append({
                 'election': election,
-                'candidates': [],
-                'total_votes': 0
+
+                'institutional_results': [],
+                'institutional_total_votes': 0,
+
+                'campus_results': [],
+                'campus_total_votes': 0,
             })
+
 
     return render(
         request,
         'voting/results.html',
         {
-            'elections': results_data
+            'elections': results_data,
         }
     )
 
@@ -432,24 +565,71 @@ def create_election(request):
         start_date = request.POST.get('start_date')
         end_date = request.POST.get('end_date')
         status = request.POST.get('status')
-        election_type = request.POST.get('election_type', 'INSTITUTIONAL')
+        election_type = request.POST.get(
+            'election_type',
+            'INSTITUTIONAL'
+        )
         campus = request.POST.get('campus', '')
 
-        election = Election.objects.create(
-            title=title,
-            description=description,
-            start_date=start_date,
-            end_date=end_date,
-            status=status,
-            election_type=election_type,
-            campus=campus if campus else None
-        )
-        
-        AuditLog.objects.create(
-            user=request.user,
-            action='CREATE_ELECTION',
-            description=f'Created election: {election.title}'
-        )
+        # Create election and candidates together
+        with transaction.atomic():
+
+            election = Election.objects.create(
+                title=title,
+                description=description,
+                start_date=start_date,
+                end_date=end_date,
+                status=status,
+                election_type=election_type,
+                campus=campus if campus else None
+            )
+
+            # Get the number of candidates submitted
+            candidate_count = int(
+                request.POST.get('candidate_count', 0)
+            )
+
+            # Create each candidate
+            for i in range(candidate_count):
+
+                candidate_name = request.POST.get(
+                    f'candidate_name_{i}'
+                )
+
+                candidate_type = request.POST.get(
+                    f'candidate_type_{i}'
+                )
+                candidate_src_category = request.POST.get(
+                    f'candidate_src_category_{i}'
+           
+                )
+
+                candidate_description = request.POST.get(
+                    f'candidate_description_{i}',
+                    ''
+                )
+
+                candidate_image = request.FILES.get(
+                    f'candidate_image_{i}'
+                )
+
+                # Only create a candidate if a name was provided
+                if candidate_name:
+
+                    Candidate.objects.create(
+                        election=election,
+                        name=candidate_name,
+                        candidate_type=candidate_type,
+                        src_category=candidate_src_category,
+                        description=candidate_description,
+                        image=candidate_image
+                    )
+
+            AuditLog.objects.create(
+                user=request.user,
+                action='CREATE_ELECTION',
+                description=f'Created election: {election.title}'
+            )
 
         messages.success(
             request,
@@ -458,7 +638,10 @@ def create_election(request):
 
         return redirect('manage_elections')
 
-    return render(request, 'voting/create_election.html')
+    return render(
+        request,
+        'voting/create_election.html'
+    )
 
 
 @login_required(login_url='login')
