@@ -8,10 +8,10 @@ from django.db.models import Count, F
 from django.http import HttpResponseForbidden
 from django.core.paginator import Paginator
 import pandas as pd
-from django.db import transaction
+from django.db import transaction, IntegrityError
 
 from .forms import RegistrationForm, ProfileUpdateForm, StudentImportForm
-from .models import Election, Candidate, StudentProfile, Vote, AuditLog
+from .models import Election, Candidate, StudentProfile, Vote, VoterReceipt, AuditLog
 
 
 def home(request):
@@ -112,7 +112,7 @@ def dashboard(request):
     for election in elections:
         election.update_status()
 
-    voted_election_ids = Vote.objects.filter(
+    voted_election_ids = VoterReceipt.objects.filter(
         voter=request.user
     ).values_list(
         'election_id',
@@ -189,13 +189,13 @@ def vote(request, election_id):
 
     # Check whether the voter has already completed
     # both sections of this election
-    institutional_vote = Vote.objects.filter(
+    institutional_vote = VoterReceipt.objects.filter(
         voter=request.user,
         election=election,
         src_category='INSTITUTIONAL'
     ).exists()
 
-    campus_vote = Vote.objects.filter(
+    campus_vote = VoterReceipt.objects.filter(
         voter=request.user,
         election=election,
         src_category='CAMPUS'
@@ -267,22 +267,50 @@ def vote(request, election_id):
             src_category='CAMPUS'
         )
 
-        # Save both votes together
-        with transaction.atomic():
+        # Save both votes together. VoterReceipt (identified) and
+        # Vote (anonymous) are written in the same atomic block for
+        # each category. If a race condition causes a duplicate
+        # attempt, the database's unique constraint on VoterReceipt
+        # rejects it.
+        try:
+            with transaction.atomic():
 
-            Vote.objects.create(
-                voter=request.user,
-                election=election,
-                candidate=institutional_candidate,
-                src_category='INSTITUTIONAL'
-            )
+                VoterReceipt.objects.create(
+                    voter=request.user,
+                    election=election,
+                    src_category='INSTITUTIONAL'
+                )
 
-            Vote.objects.create(
-                voter=request.user,
-                election=election,
-                candidate=campus_candidate,
-                src_category='CAMPUS'
+                Vote.objects.create(
+                    election=election,
+                    candidate=institutional_candidate,
+                    src_category='INSTITUTIONAL'
+                )
+
+                VoterReceipt.objects.create(
+                    voter=request.user,
+                    election=election,
+                    src_category='CAMPUS'
+                )
+
+                Vote.objects.create(
+                    election=election,
+                    candidate=campus_candidate,
+                    src_category='CAMPUS'
+                )
+
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='VOTE_CAST',
+                    description=f'Voter cast Institutional and Campus SRC ballots in election "{election.title}".'
+                )
+
+        except IntegrityError:
+            messages.error(
+                request,
+                'You have already voted in one or both categories for this election.'
             )
+            return redirect('dashboard')
 
         messages.success(
             request,
@@ -460,11 +488,11 @@ def profile(request):
         messages.warning(request, 'Your student profile has not been set up yet.')
 
     total_elections = Election.objects.count()
-    elections_voted = Vote.objects.filter(voter=request.user).count()
+    elections_voted = VoterReceipt.objects.filter(voter=request.user).values('election_id').distinct().count()
     pending_elections = Election.objects.filter(
         status='OPEN'
     ).exclude(
-        id__in=Vote.objects.filter(voter=request.user).values_list('election_id', flat=True)
+        id__in=VoterReceipt.objects.filter(voter=request.user).values_list('election_id', flat=True)
     ).count()
 
     return render(
