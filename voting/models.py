@@ -171,10 +171,10 @@ class Candidate(models.Model):
 
 class VoterReceipt(models.Model):
     """
-    Proves that a given user has voted in a given election, for a
-    given SRC category, WITHOUT recording which candidate they
-    chose. This enforces 'one vote per voter per election per
-    category' now that Vote is anonymous.
+    Records that a student has voted in an election/category.
+
+    This model identifies the voter but does NOT store
+    which candidate they selected.
     """
 
     SRC_CATEGORY_CHOICES = [
@@ -216,7 +216,10 @@ class VoterReceipt(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.voter.username} voted in {self.election.title} - {self.src_category}'
+        return (
+            f'{self.voter.username} voted in '
+            f'{self.election.title} - {self.src_category}'
+        )
 
 
 class Vote(models.Model):
@@ -250,7 +253,12 @@ class Vote(models.Model):
     )
 
     def __str__(self):
-        return f'{self.candidate.name} - {self.election.title} - {self.src_category}'
+        return (
+            f'{self.candidate.name} - '
+            f'{self.election.title} - '
+            f'{self.src_category}'
+        )
+
 
 class AuditLog(models.Model):
 
