@@ -6,6 +6,7 @@ from .models import (
     StudentProfile,
     Election,
     Candidate,
+    VoterReceipt,
     Vote,
     AuditLog
 )
@@ -13,9 +14,28 @@ from .models import (
 
 # Custom User Admin
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'is_active')
-    list_filter = ('is_staff', 'is_superuser', 'is_active')
-    search_fields = ('username', 'email', 'first_name', 'last_name')
+    list_display = (
+        'username',
+        'email',
+        'first_name',
+        'last_name',
+        'is_staff',
+        'is_active'
+    )
+
+    list_filter = (
+        'is_staff',
+        'is_superuser',
+        'is_active'
+    )
+
+    search_fields = (
+        'username',
+        'email',
+        'first_name',
+        'last_name'
+    )
+
     ordering = ('username',)
 
 
@@ -73,30 +93,70 @@ class CandidateAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(Vote)
-class VoteAdmin(admin.ModelAdmin):
+@admin.register(VoterReceipt)
+class VoterReceiptAdmin(admin.ModelAdmin):
+    """
+    Records that a voter has voted without recording
+    which candidate they selected.
+    """
+
     list_display = (
         'voter',
         'election',
-        'candidate',
+        'src_category',
         'voted_at',
     )
 
     list_filter = (
         'election',
+        'src_category',
         'voted_at',
     )
 
     search_fields = (
         'voter__username',
         'election__title',
-        'candidate__name',
     )
 
     readonly_fields = (
         'voter',
         'election',
+        'src_category',
+        'voted_at',
+    )
+
+
+@admin.register(Vote)
+class VoteAdmin(admin.ModelAdmin):
+    """
+    Anonymous ballots only.
+
+    Intentionally does not display or search for a voter,
+    because Vote no longer contains voter information.
+    """
+
+    list_display = (
+        'election',
         'candidate',
+        'src_category',
+        'voted_at',
+    )
+
+    list_filter = (
+        'election',
+        'src_category',
+        'voted_at',
+    )
+
+    search_fields = (
+        'election__title',
+        'candidate__name',
+    )
+
+    readonly_fields = (
+        'election',
+        'candidate',
+        'src_category',
         'voted_at',
     )
 

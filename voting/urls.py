@@ -25,4 +25,7 @@ urlpatterns = [
     path('admin-dashboard/elections/<int:election_id>/delete/', views.delete_election, name='delete_election'),
     path('admin-dashboard/import-students/', views.import_students, name='import_students'),
     path('admin-dashboard/audit-logs/', views.view_audit_logs, name='view_audit_logs'),
+    path('admin-dashboard/export-results/',views.export_results_excel,name='export_results_excel'),
+    path(
+    'admin-dashboard/export-results-pdf/',views.export_results_pdf,name='export_results_pdf'),
 ]

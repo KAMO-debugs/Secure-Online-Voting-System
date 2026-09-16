@@ -5,14 +5,14 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, F
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.core.paginator import Paginator
 import pandas as pd
-from django.db import transaction
-
+from django.db import transaction, IntegrityError
 from .forms import RegistrationForm, ProfileUpdateForm, StudentImportForm
-from .models import Election, Candidate, StudentProfile, Vote, AuditLog
-
+from .models import Election, Candidate, StudentProfile, Vote, VoterReceipt, AuditLog
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 def home(request):
     return render(request, 'voting/home.html')
@@ -112,7 +112,7 @@ def dashboard(request):
     for election in elections:
         election.update_status()
 
-    voted_election_ids = Vote.objects.filter(
+    voted_election_ids = VoterReceipt.objects.filter(
         voter=request.user
     ).values_list(
         'election_id',
@@ -189,13 +189,13 @@ def vote(request, election_id):
 
     # Check whether the voter has already completed
     # both sections of this election
-    institutional_vote = Vote.objects.filter(
+    institutional_vote = VoterReceipt.objects.filter(
         voter=request.user,
         election=election,
         src_category='INSTITUTIONAL'
     ).exists()
 
-    campus_vote = Vote.objects.filter(
+    campus_vote = VoterReceipt.objects.filter(
         voter=request.user,
         election=election,
         src_category='CAMPUS'
@@ -267,22 +267,55 @@ def vote(request, election_id):
             src_category='CAMPUS'
         )
 
-        # Save both votes together
-        with transaction.atomic():
+        # Save both voting records together.
+        # VoterReceipt identifies that the student voted.
+        # Vote stores only the anonymous ballot choice.
+        try:
+            with transaction.atomic():
 
-            Vote.objects.create(
-                voter=request.user,
-                election=election,
-                candidate=institutional_candidate,
-                src_category='INSTITUTIONAL'
-            )
+                # Institutional SRC receipt
+                VoterReceipt.objects.create(
+                    voter=request.user,
+                    election=election,
+                    src_category='INSTITUTIONAL'
+                )
 
-            Vote.objects.create(
-                voter=request.user,
-                election=election,
-                candidate=campus_candidate,
-                src_category='CAMPUS'
+                # Institutional anonymous ballot
+                Vote.objects.create(
+                    election=election,
+                    candidate=institutional_candidate,
+                    src_category='INSTITUTIONAL'
+                )
+
+                # Campus SRC receipt
+                VoterReceipt.objects.create(
+                    voter=request.user,
+                    election=election,
+                    src_category='CAMPUS'
+                )
+
+                # Campus anonymous ballot
+                Vote.objects.create(
+                    election=election,
+                    candidate=campus_candidate,
+                    src_category='CAMPUS'
+                )
+
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='VOTE_CAST',
+                    description=(
+                        f'Voter cast Institutional and Campus SRC ballots '
+                        f'in election "{election.title}".'
+                    )
+                )
+
+        except IntegrityError:
+            messages.error(
+                request,
+                'You have already voted in one or both categories for this election.'
             )
+            return redirect('dashboard')
 
         messages.success(
             request,
@@ -460,11 +493,11 @@ def profile(request):
         messages.warning(request, 'Your student profile has not been set up yet.')
 
     total_elections = Election.objects.count()
-    elections_voted = Vote.objects.filter(voter=request.user).count()
+    elections_voted = VoterReceipt.objects.filter(voter=request.user).values('election_id').distinct().count()
     pending_elections = Election.objects.filter(
         status='OPEN'
     ).exclude(
-        id__in=Vote.objects.filter(voter=request.user).values_list('election_id', flat=True)
+        id__in=VoterReceipt.objects.filter(voter=request.user).values_list('election_id', flat=True)
     ).count()
 
     return render(
@@ -521,6 +554,24 @@ def admin_dashboard(request):
     total_candidates = Candidate.objects.count()
     total_voters = User.objects.filter(is_staff=False).count()
 
+    # Voting statistics
+    total_votes = Vote.objects.count()
+
+    students_voted = VoterReceipt.objects.values('voter').distinct().count()
+
+    students_not_voted = max(
+        total_voters - students_voted,
+        0
+    )
+
+    if total_voters > 0:
+        voting_percentage = round(
+            (students_voted / total_voters) * 100,
+            2
+        )
+    else:
+        voting_percentage = 0
+
     return render(
         request,
         'voting/admin_dashboard.html',
@@ -528,9 +579,12 @@ def admin_dashboard(request):
             'total_elections': total_elections,
             'total_candidates': total_candidates,
             'total_voters': total_voters,
+            'total_votes': total_votes,
+            'students_voted': students_voted,
+            'students_not_voted': students_not_voted,
+            'voting_percentage': voting_percentage,
         }
     )
-
 
 @login_required(login_url='login')
 def manage_elections(request):
@@ -856,3 +910,828 @@ def view_audit_logs(request):
             'user_filter': user_filter,
         }
     )
+@login_required(login_url='login')
+def export_results_excel(request):
+    if not request.user.is_staff:
+        return redirect('dashboard')
+
+    # ---------------------------------------------------------
+    # 1. ELECTION SUMMARY
+    # ---------------------------------------------------------
+
+    elections = Election.objects.all().order_by('-end_date')
+
+    summary_data = []
+
+    for election in elections:
+
+        election.update_status()
+
+        eligible_students = StudentProfile.objects.filter(
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).count()
+
+        students_voted = VoterReceipt.objects.filter(
+            election=election
+        ).values('voter').distinct().count()
+
+        students_not_voted = max(
+            eligible_students - students_voted,
+            0
+        )
+
+        participation = (
+            round((students_voted / eligible_students) * 100, 2)
+            if eligible_students > 0
+            else 0
+        )
+
+        institutional_votes = Vote.objects.filter(
+            election=election,
+            src_category='INSTITUTIONAL'
+        ).count()
+
+        campus_votes = Vote.objects.filter(
+            election=election,
+            src_category='CAMPUS'
+        ).count()
+
+        summary_data.append({
+            'Election': election.title,
+            'Election Type': election.get_election_type_display(),
+            'Campus': election.campus or 'All Campuses',
+            'Status': election.get_status_display(),
+            'Start Date': election.start_date.strftime(
+                '%Y-%m-%d %H:%M'
+            ),
+            'End Date': election.end_date.strftime(
+                '%Y-%m-%d %H:%M'
+            ),
+            'Eligible Students': eligible_students,
+            'Students Who Voted': students_voted,
+            'Students Not Voted': students_not_voted,
+            'Participation (%)': participation,
+            'Institutional Votes': institutional_votes,
+            'Campus Votes': campus_votes,
+        })
+
+    summary_df = pd.DataFrame(summary_data)
+
+    # ---------------------------------------------------------
+    # 2. CANDIDATE RESULTS
+    # ---------------------------------------------------------
+
+    candidate_data = []
+
+    for election in elections:
+
+        for category in ['INSTITUTIONAL', 'CAMPUS']:
+
+            candidates = election.candidates.filter(
+                src_category=category
+            )
+
+            total_category_votes = Vote.objects.filter(
+                election=election,
+                src_category=category
+            ).count()
+
+            candidate_votes = []
+
+            for candidate in candidates:
+
+                vote_count = Vote.objects.filter(
+                    election=election,
+                    candidate=candidate,
+                    src_category=category
+                ).count()
+
+                percentage = (
+                    round(
+                        (vote_count / total_category_votes) * 100,
+                        2
+                    )
+                    if total_category_votes > 0
+                    else 0
+                )
+
+                candidate_votes.append({
+                    'candidate': candidate,
+                    'vote_count': vote_count,
+                    'percentage': percentage,
+                })
+
+            max_votes = max(
+                [item['vote_count'] for item in candidate_votes],
+                default=0
+            )
+
+            for item in candidate_votes:
+
+                candidate_data.append({
+                    'Election': election.title,
+                    'SRC Category': category,
+                    'Candidate': item['candidate'].name,
+                    'Candidate Type':
+                        item['candidate'].get_candidate_type_display(),
+                    'Votes': item['vote_count'],
+                    'Percentage (%)': item['percentage'],
+                    'Result':
+                        'Winner'
+                        if item['vote_count'] == max_votes
+                        and max_votes > 0
+                        else ''
+                })
+
+    candidate_df = pd.DataFrame(candidate_data)
+
+    # ---------------------------------------------------------
+    # 3. CAMPUS STATISTICS
+    # ---------------------------------------------------------
+
+    campus_data = []
+
+    campuses = StudentProfile.objects.values_list(
+        'campus',
+        flat=True
+    ).distinct().order_by('campus')
+
+    for campus in campuses:
+
+        if not campus:
+            continue
+
+        eligible = StudentProfile.objects.filter(
+            campus=campus,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).count()
+
+        student_numbers = StudentProfile.objects.filter(
+            campus=campus,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).values_list(
+            'user_id',
+            flat=True
+        )
+
+        voted = VoterReceipt.objects.filter(
+            voter_id__in=student_numbers
+        ).values('voter').distinct().count()
+
+        not_voted = max(
+            eligible - voted,
+            0
+        )
+
+        participation = (
+            round((voted / eligible) * 100, 2)
+            if eligible > 0
+            else 0
+        )
+
+        campus_data.append({
+            'Campus': campus,
+            'Eligible Students': eligible,
+            'Students Who Voted': voted,
+            'Students Not Voted': not_voted,
+            'Participation (%)': participation,
+        })
+
+    campus_df = pd.DataFrame(campus_data)
+
+    # ---------------------------------------------------------
+    # 4. FACULTY STATISTICS
+    # ---------------------------------------------------------
+
+    faculty_data = []
+
+    faculties = StudentProfile.objects.values_list(
+        'faculty',
+        flat=True
+    ).distinct().order_by('faculty')
+
+    for faculty in faculties:
+
+        if not faculty:
+            continue
+
+        eligible = StudentProfile.objects.filter(
+            faculty=faculty,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).count()
+
+        student_numbers = StudentProfile.objects.filter(
+            faculty=faculty,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).values_list(
+            'user_id',
+            flat=True
+        )
+
+        voted = VoterReceipt.objects.filter(
+            voter_id__in=student_numbers
+        ).values('voter').distinct().count()
+
+        not_voted = max(
+            eligible - voted,
+            0
+        )
+
+        participation = (
+            round((voted / eligible) * 100, 2)
+            if eligible > 0
+            else 0
+        )
+
+        faculty_data.append({
+            'Faculty': faculty,
+            'Eligible Students': eligible,
+            'Students Who Voted': voted,
+            'Students Not Voted': not_voted,
+            'Participation (%)': participation,
+        })
+
+    faculty_df = pd.DataFrame(faculty_data)
+
+    # ---------------------------------------------------------
+    # 5. RESPONSE
+    # ---------------------------------------------------------
+
+    response = HttpResponse(
+        content_type=(
+            'application/vnd.openxmlformats-officedocument'
+            '.spreadsheetml.sheet'
+        )
+    )
+
+    response['Content-Disposition'] = (
+        'attachment; filename="SRC_Voting_Report.xlsx"'
+    )
+
+    with pd.ExcelWriter(
+        response,
+        engine='openpyxl'
+    ) as writer:
+
+        summary_df.to_excel(
+            writer,
+            index=False,
+            sheet_name='Election Summary'
+        )
+
+        candidate_df.to_excel(
+            writer,
+            index=False,
+            sheet_name='Candidate Results'
+        )
+
+        campus_df.to_excel(
+            writer,
+            index=False,
+            sheet_name='Campus Statistics'
+        )
+
+        faculty_df.to_excel(
+            writer,
+            index=False,
+            sheet_name='Faculty Statistics'
+        )
+
+    return response
+
+@login_required(login_url='login')
+def export_results_pdf(request):
+    if not request.user.is_staff:
+        return redirect('dashboard')
+
+    response = HttpResponse(content_type='application/pdf')
+
+    response['Content-Disposition'] = (
+        'attachment; filename="SRC_Voting_Report.pdf"'
+    )
+
+    pdf = canvas.Canvas(response, pagesize=A4)
+
+    width, height = A4
+
+    # ---------------------------------------------------------
+    # Helper function for page breaks
+    # ---------------------------------------------------------
+
+    def check_page(y_position):
+        if y_position < 60:
+            pdf.showPage()
+            return height - 50
+        return y_position
+
+    # ---------------------------------------------------------
+    # REPORT HEADER
+    # ---------------------------------------------------------
+
+    y = height - 50
+
+    pdf.setFont('Helvetica-Bold', 20)
+    pdf.drawString(
+        50,
+        y,
+        'Live SRC Voting System'
+    )
+
+    y -= 30
+
+    pdf.setFont('Helvetica-Bold', 15)
+    pdf.drawString(
+        50,
+        y,
+        'Election Report'
+    )
+
+    y -= 25
+
+    pdf.setFont('Helvetica', 9)
+    pdf.drawString(
+        50,
+        y,
+        f'Generated: {timezone.now().strftime("%Y-%m-%d %H:%M:%S")}'
+    )
+
+    y -= 35
+
+    # ---------------------------------------------------------
+    # OVERALL STATISTICS
+    # ---------------------------------------------------------
+
+    eligible_students = StudentProfile.objects.filter(
+        registered=True,
+        eligible=True,
+        account_status='ACTIVE'
+    ).count()
+
+    students_voted = VoterReceipt.objects.values(
+        'voter'
+    ).distinct().count()
+
+    students_not_voted = max(
+        eligible_students - students_voted,
+        0
+    )
+
+    participation = (
+        round(
+            (students_voted / eligible_students) * 100,
+            2
+        )
+        if eligible_students > 0
+        else 0
+    )
+
+    institutional_votes = Vote.objects.filter(
+        src_category='INSTITUTIONAL'
+    ).count()
+
+    campus_votes = Vote.objects.filter(
+        src_category='CAMPUS'
+    ).count()
+
+    pdf.setFont('Helvetica-Bold', 13)
+    pdf.drawString(
+        50,
+        y,
+        'Overall Voting Statistics'
+    )
+
+    y -= 25
+
+    pdf.setFont('Helvetica', 10)
+
+    statistics = [
+        f'Eligible Students: {eligible_students}',
+        f'Students Who Voted: {students_voted}',
+        f'Students Not Voted: {students_not_voted}',
+        f'Participation: {participation}%',
+        f'Institutional SRC Votes: {institutional_votes}',
+        f'Campus SRC Votes: {campus_votes}',
+    ]
+
+    for item in statistics:
+
+        y = check_page(y)
+
+        pdf.drawString(60, y, item)
+
+        y -= 18
+
+    y -= 15
+
+    # ---------------------------------------------------------
+    # ELECTION INFORMATION
+    # ---------------------------------------------------------
+
+    elections = Election.objects.all().order_by('-end_date')
+
+    pdf.setFont('Helvetica-Bold', 13)
+    pdf.drawString(
+        50,
+        y,
+        'Elections'
+    )
+
+    y -= 25
+
+    for election in elections:
+
+        y = check_page(y)
+
+        pdf.setFont('Helvetica-Bold', 10)
+        pdf.drawString(
+            60,
+            y,
+            election.title[:60]
+        )
+
+        y -= 17
+
+        pdf.setFont('Helvetica', 9)
+
+        pdf.drawString(
+            70,
+            y,
+            f'Type: {election.get_election_type_display()}'
+        )
+
+        y -= 15
+
+        pdf.drawString(
+            70,
+            y,
+            f'Status: {election.get_status_display()}'
+        )
+
+        y -= 15
+
+        pdf.drawString(
+            70,
+            y,
+            f'Campus: {election.campus or "All Campuses"}'
+        )
+
+        y -= 15
+
+        pdf.drawString(
+            70,
+            y,
+            f'Start: {election.start_date.strftime("%Y-%m-%d %H:%M")}'
+        )
+
+        y -= 15
+
+        pdf.drawString(
+            70,
+            y,
+            f'End: {election.end_date.strftime("%Y-%m-%d %H:%M")}'
+        )
+
+        y -= 25
+
+    # ---------------------------------------------------------
+    # CANDIDATE RESULTS
+    # ---------------------------------------------------------
+
+    pdf.setFont('Helvetica-Bold', 13)
+    pdf.drawString(
+        50,
+        y,
+        'Candidate Results'
+    )
+
+    y -= 25
+
+    elections = Election.objects.all().order_by('-end_date')
+
+    for election in elections:
+
+        for category in ['INSTITUTIONAL', 'CAMPUS']:
+
+            candidates = election.candidates.filter(
+                src_category=category
+            )
+
+            if not candidates.exists():
+                continue
+
+            y = check_page(y)
+
+            pdf.setFont('Helvetica-Bold', 11)
+            pdf.drawString(
+                60,
+                y,
+                f'{election.title[:35]} - {category}'
+            )
+
+            y -= 18
+
+            total_category_votes = Vote.objects.filter(
+                election=election,
+                src_category=category
+            ).count()
+
+            candidate_results = []
+
+            for candidate in candidates:
+
+                vote_count = Vote.objects.filter(
+                    election=election,
+                    candidate=candidate,
+                    src_category=category
+                ).count()
+
+                percentage = (
+                    round(
+                        (vote_count / total_category_votes) * 100,
+                        2
+                    )
+                    if total_category_votes > 0
+                    else 0
+                )
+
+                candidate_results.append({
+                    'name': candidate.name,
+                    'votes': vote_count,
+                    'percentage': percentage,
+                })
+
+            max_votes = max(
+                [
+                    result['votes']
+                    for result in candidate_results
+                ],
+                default=0
+            )
+
+            pdf.setFont('Helvetica', 9)
+
+            for result in candidate_results:
+
+                y = check_page(y)
+
+                result_label = ''
+
+                if (
+                    result['votes'] == max_votes
+                    and max_votes > 0
+                ):
+                    result_label = ' - Winner'
+
+                pdf.drawString(
+                    70,
+                    y,
+                    (
+                        f'{result["name"][:35]}'
+                        f' | Votes: {result["votes"]}'
+                        f' | {result["percentage"]}%'
+                        f'{result_label}'
+                    )
+                )
+
+                y -= 16
+
+            y -= 10
+
+    # ---------------------------------------------------------
+    # CAMPUS STATISTICS
+    # ---------------------------------------------------------
+
+    y = check_page(y)
+
+    pdf.setFont('Helvetica-Bold', 13)
+    pdf.drawString(
+        50,
+        y,
+        'Campus Statistics'
+    )
+
+    y -= 25
+
+    campuses = StudentProfile.objects.values_list(
+        'campus',
+        flat=True
+    ).distinct().order_by('campus')
+
+    for campus in campuses:
+
+        if not campus:
+            continue
+
+        eligible = StudentProfile.objects.filter(
+            campus=campus,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).count()
+
+        user_ids = StudentProfile.objects.filter(
+            campus=campus,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).values_list(
+            'user_id',
+            flat=True
+        )
+
+        voted = VoterReceipt.objects.filter(
+            voter_id__in=user_ids
+        ).values('voter').distinct().count()
+
+        not_voted = max(
+            eligible - voted,
+            0
+        )
+
+        campus_participation = (
+            round(
+                (voted / eligible) * 100,
+                2
+            )
+            if eligible > 0
+            else 0
+        )
+
+        y = check_page(y)
+
+        pdf.setFont('Helvetica-Bold', 10)
+        pdf.drawString(
+            60,
+            y,
+            campus
+        )
+
+        y -= 16
+
+        pdf.setFont('Helvetica', 9)
+
+        pdf.drawString(
+            70,
+            y,
+            f'Eligible: {eligible}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Voted: {voted}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Not Voted: {not_voted}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Participation: {campus_participation}%'
+        )
+
+        y -= 22
+
+    # ---------------------------------------------------------
+    # FACULTY STATISTICS
+    # ---------------------------------------------------------
+
+    y = check_page(y)
+
+    pdf.setFont('Helvetica-Bold', 13)
+    pdf.drawString(
+        50,
+        y,
+        'Faculty Statistics'
+    )
+
+    y -= 25
+
+    faculties = StudentProfile.objects.values_list(
+        'faculty',
+        flat=True
+    ).distinct().order_by('faculty')
+
+    for faculty in faculties:
+
+        if not faculty:
+            continue
+
+        eligible = StudentProfile.objects.filter(
+            faculty=faculty,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).count()
+
+        user_ids = StudentProfile.objects.filter(
+            faculty=faculty,
+            registered=True,
+            eligible=True,
+            account_status='ACTIVE'
+        ).values_list(
+            'user_id',
+            flat=True
+        )
+
+        voted = VoterReceipt.objects.filter(
+            voter_id__in=user_ids
+        ).values('voter').distinct().count()
+
+        not_voted = max(
+            eligible - voted,
+            0
+        )
+
+        faculty_participation = (
+            round(
+                (voted / eligible) * 100,
+                2
+            )
+            if eligible > 0
+            else 0
+        )
+
+        y = check_page(y)
+
+        pdf.setFont('Helvetica-Bold', 10)
+        pdf.drawString(
+            60,
+            y,
+            faculty[:60]
+        )
+
+        y -= 16
+
+        pdf.setFont('Helvetica', 9)
+
+        pdf.drawString(
+            70,
+            y,
+            f'Eligible: {eligible}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Voted: {voted}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Not Voted: {not_voted}'
+        )
+
+        y -= 14
+
+        pdf.drawString(
+            70,
+            y,
+            f'Participation: {faculty_participation}%'
+        )
+
+        y -= 22
+
+    # ---------------------------------------------------------
+    # FOOTER
+    # ---------------------------------------------------------
+
+    y = check_page(y)
+
+    pdf.setFont('Helvetica-Oblique', 8)
+
+    pdf.drawString(
+        50,
+        y,
+        'This report contains aggregated voting statistics and '
+        'does not reveal individual voter choices.'
+    )
+
+    pdf.save()
+
+    return response

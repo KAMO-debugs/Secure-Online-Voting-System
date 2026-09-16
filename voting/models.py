@@ -169,7 +169,13 @@ class Candidate(models.Model):
         return self.name
 
 
-class Vote(models.Model):
+class VoterReceipt(models.Model):
+    """
+    Records that a student has voted in an election/category.
+
+    This model identifies the voter but does NOT store
+    which candidate they selected.
+    """
 
     SRC_CATEGORY_CHOICES = [
         ('INSTITUTIONAL', 'Institutional SRC'),
@@ -179,8 +185,49 @@ class Vote(models.Model):
     voter = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='votes'
+        related_name='voter_receipts'
     )
+
+    election = models.ForeignKey(
+        Election,
+        on_delete=models.CASCADE,
+        related_name='voter_receipts'
+    )
+
+    src_category = models.CharField(
+        max_length=20,
+        choices=SRC_CATEGORY_CHOICES
+    )
+
+    voted_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'voter',
+                    'election',
+                    'src_category'
+                ],
+                name='one_receipt_per_category_per_election'
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f'{self.voter.username} voted in '
+            f'{self.election.title} - {self.src_category}'
+        )
+
+
+class Vote(models.Model):
+
+    SRC_CATEGORY_CHOICES = [
+        ('INSTITUTIONAL', 'Institutional SRC'),
+        ('CAMPUS', 'Campus SRC'),
+    ]
 
     election = models.ForeignKey(
         Election,
@@ -205,20 +252,13 @@ class Vote(models.Model):
         auto_now_add=True
     )
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=[
-                    'voter',
-                    'election',
-                    'src_category'
-                ],
-                name='one_vote_per_category_per_election'
-            )
-        ]
-
     def __str__(self):
-        return f'{self.voter.username} - {self.election.title} - {self.src_category}'
+        return (
+            f'{self.candidate.name} - '
+            f'{self.election.title} - '
+            f'{self.src_category}'
+        )
+
 
 class AuditLog(models.Model):
 
