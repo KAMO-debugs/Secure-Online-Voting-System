@@ -7,6 +7,7 @@ from .models import (
     Election,
     Candidate,
     Vote,
+    VoterReceipt,
     AuditLog
 )
 
@@ -75,28 +76,65 @@ class CandidateAdmin(admin.ModelAdmin):
 
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
+    """
+    Anonymous ballots only — intentionally no voter field. This is
+    the point of the anonymity fix: not even a superuser browsing
+    the Django admin can see who cast which vote here.
+    """
     list_display = (
-        'voter',
         'election',
         'candidate',
+        'src_category',
         'voted_at',
     )
 
     list_filter = (
         'election',
+        'src_category',
+        'voted_at',
+    )
+
+    search_fields = (
+        'election__title',
+        'candidate__name',
+    )
+
+    readonly_fields = (
+        'election',
+        'candidate',
+        'src_category',
+        'voted_at',
+    )
+
+
+@admin.register(VoterReceipt)
+class VoterReceiptAdmin(admin.ModelAdmin):
+    """
+    Identified record of WHO voted, in WHICH election and category
+    — never who they picked.
+    """
+    list_display = (
+        'voter',
+        'election',
+        'src_category',
+        'voted_at',
+    )
+
+    list_filter = (
+        'election',
+        'src_category',
         'voted_at',
     )
 
     search_fields = (
         'voter__username',
         'election__title',
-        'candidate__name',
     )
 
     readonly_fields = (
         'voter',
         'election',
-        'candidate',
+        'src_category',
         'voted_at',
     )
 
